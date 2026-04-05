@@ -1,10 +1,15 @@
 {
   "name": "oxford-voting-bot",
   "version": "5.0.0",
+  "description": "Oxford House Discord bot for motions and global events",
   "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "deploy:guild": "node deploy-commands.js"
+  },
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "axios": "^1.6.0",
-    "dotenv": "^17.3.1"
+    "axios": "^1.7.9",
+    "discord.js": "^14.19.3"
   }
 }
