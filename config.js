@@ -1,0 +1,1 @@
+module.exports = { token: 'YOUR_TOKEN', clientId: 'YOUR_CLIENT_ID' };

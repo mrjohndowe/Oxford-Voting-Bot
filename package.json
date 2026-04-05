@@ -1,0 +1,10 @@
+{
+  "name": "oxford-voting-bot",
+  "version": "5.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "axios": "^1.6.0",
+    "dotenv": "^17.3.1"
+  }
+}
