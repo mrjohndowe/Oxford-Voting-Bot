@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { pipeline } = require('stream/promises');
 const {
   Client,
   GatewayIntentBits,
@@ -33,11 +34,13 @@ const client = new Client({
 
 const motionsFile = path.resolve(__dirname, config.jsonFile || './motions.json');
 const eventsFile = path.resolve(__dirname, config.eventsFile || './events.json');
+const eventImagesDir = path.resolve(__dirname, './uploads/event_images');
 const housesFile = path.resolve(__dirname, config.houseConfigFile || './houses.json');
 
 let motions = [];
 let events = [];
 let houseConfigs = {};
+const pendingEventDrafts = new Map();
 
 /* =========================
    CONFIG HELPERS
@@ -1108,6 +1111,10 @@ function buildEventEmbed(eventRecord) {
     .setFooter({ text: '© 2026 Mr John Dowe' })
     .setTimestamp(new Date(eventRecord.updatedAt || eventRecord.createdAt || Date.now()));
 
+  if (eventRecord.imageUrl) {
+    embed.setImage(eventRecord.imageUrl);
+  }
+
   return embed;
 }
 
@@ -1344,7 +1351,11 @@ function buildSlashCommands() {
       .setDescription('Create a new motion'),
     new SlashCommandBuilder()
       .setName('event')
-      .setDescription('Create a new event RSVP'),
+      .setDescription('Create a new event RSVP')
+      .addAttachmentOption((option) =>
+        option.setName('image')
+          .setDescription('Optional event image to upload and attach to the RSVP post')
+          .setRequired(false)),
   ].map((command) => command.toJSON());
 }
 
@@ -1475,6 +1486,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
             flags: MessageFlags.Ephemeral,
           });
           return;
+        }
+
+        const imageAttachment = interaction.options.getAttachment('image');
+
+        if (imageAttachment) {
+          if (!String(imageAttachment.contentType || '').toLowerCase().startsWith('image/')) {
+            await interaction.reply({
+              content: 'The image option only accepts image files.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+
+          try {
+            pendingEventDrafts.set(getPendingEventDraftKey(interaction), await saveEventImageAttachment(imageAttachment));
+          } catch (error) {
+            console.error('Failed to save event image attachment:', error);
+            await interaction.reply({
+              content: 'I could not save that image upload. Please try again with a PNG, JPG, GIF, or WEBP image.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+        } else {
+          pendingEventDrafts.delete(getPendingEventDraftKey(interaction));
         }
 
         const modal = new ModalBuilder()
@@ -1618,6 +1654,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return;
         }
 
+        const pendingImage = pendingEventDrafts.get(getPendingEventDraftKey(interaction)) || null;
+        pendingEventDrafts.delete(getPendingEventDraftKey(interaction));
+
         const eventRecord = normalizeEventVotes({
           id: createId(),
           type: 'event',
@@ -1627,6 +1666,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
           eventName,
           eventDateTime,
           status: 'Open',
+          imageUrl: pendingImage?.url || null,
+          imageProxyUrl: pendingImage?.proxyUrl || null,
+          imageFilename: pendingImage?.filename || null,
+          imageOriginalName: pendingImage?.originalName || null,
+          imageContentType: pendingImage?.contentType || null,
+          imageSize: pendingImage?.size || null,
+          imagePath: pendingImage?.relativePath || null,
+          imageUploadedAt: pendingImage?.uploadedAt || null,
           yesVotes: [],
           noVotes: [],
           maybeVotes: [],
